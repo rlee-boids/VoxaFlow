@@ -1,4 +1,22 @@
 services:
+  whisper-stt:
+    devices:
+      - "nvidia.com/gpu=0"
+    security_opt:
+      - "label=disable"
+    environment:
+      NVIDIA_VISIBLE_DEVICES: "0"
+      NVIDIA_DRIVER_CAPABILITIES: compute,utility
+
+  qwen-tts:
+    devices:
+      - "nvidia.com/gpu=0"
+    security_opt:
+      - "label=disable"
+    environment:
+      NVIDIA_VISIBLE_DEVICES: "0"
+      NVIDIA_DRIVER_CAPABILITIES: compute,utility
+
   qwen-vllm:
     devices:
       - "nvidia.com/gpu=all"

@@ -1,7 +1,7 @@
-FROM docker.io/library/python:3.11-slim
+FROM docker.io/pytorch/pytorch:2.7.0-cuda12.8-cudnn9-runtime
 WORKDIR /app
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends libsndfile1 sox \
+    && apt-get install -y --no-install-recommends ffmpeg git libsndfile1 sox \
     && rm -rf /var/lib/apt/lists/*
 COPY requirements.txt /app/requirements.txt
 RUN pip install --no-cache-dir -r /app/requirements.txt

@@ -41,6 +41,10 @@ class Settings:
     # Qwen TTS (primary open-source local TTS)
     qwen_tts_base_url: str = os.getenv("QWEN_TTS_BASE_URL", "http://qwen-tts:7200")
     qwen_tts_speaker: str = os.getenv("QWEN_TTS_SPEAKER", "ryan")
+    qwen_tts_default_instruct: str = os.getenv(
+        "QWEN_TTS_DEFAULT_INSTRUCT",
+        "Read exactly the provided text. Do not add, omit, or change words.",
+    )
 
     # ------------------------------------------------------------------
     # LLM (vLLM OpenAI-compatible endpoint)
@@ -55,6 +59,10 @@ class Settings:
         "GREETING_ASSISTANT_TEXT",
         "Thank you for calling VoxaFlow. Please hold while I connect you.",
     )
+    interstitial_assistant_text: str = os.getenv(
+        "INTERSTITIAL_ASSISTANT_TEXT",
+        "One moment please.",
+    )
     default_caller_text: str = os.getenv("DEFAULT_CALLER_TEXT", "I need help scheduling a ride.")
 
     # ------------------------------------------------------------------
@@ -64,6 +72,7 @@ class Settings:
     mock_conversation_enabled: bool = os.getenv("MOCK_CONVERSATION_ENABLED", "false").lower() == "true"
     mock_caller_media_events_per_turn: int = int(os.getenv("MOCK_CALLER_MEDIA_EVENTS_PER_TURN", "80"))
     mock_assistant_min_turn_gap_seconds: float = float(os.getenv("MOCK_ASSISTANT_MIN_TURN_GAP_SECONDS", "2.5"))
+    send_interstitial_before_llm: bool = os.getenv("SEND_INTERSTITIAL_BEFORE_LLM", "true").lower() == "true"
     mock_assistant_turns: list[str] = _load_mock_assistant_turns()
 
     # ------------------------------------------------------------------
@@ -78,16 +87,18 @@ class Settings:
     # ------------------------------------------------------------------
     vad_speech_threshold: float = float(os.getenv("VAD_SPEECH_THRESHOLD", "0.5"))
     # How long caller must be silent before we consider utterance done (ms)
-    vad_silence_threshold_ms: int = int(os.getenv("VAD_SILENCE_THRESHOLD_MS", "700"))
+    vad_silence_threshold_ms: int = int(os.getenv("VAD_SILENCE_THRESHOLD_MS", "450"))
     # Audio captured before speech onset to avoid clipping first phoneme (ms)
     vad_pre_roll_ms: int = int(os.getenv("VAD_PRE_ROLL_MS", "200"))
 
     # ------------------------------------------------------------------
     # LLM tuning
     # ------------------------------------------------------------------
-    llm_max_tokens: int = int(os.getenv("LLM_MAX_TOKENS", "80"))
+    llm_max_tokens: int = int(os.getenv("LLM_MAX_TOKENS", "48"))
     llm_temperature: float = float(os.getenv("LLM_TEMPERATURE", "0.2"))
     llm_timeout_seconds: float = float(os.getenv("LLM_TIMEOUT_SECONDS", "10.0"))
+    llm_tts_soft_flush_chars: int = int(os.getenv("LLM_TTS_SOFT_FLUSH_CHARS", "48"))
+    llm_tts_hard_flush_chars: int = int(os.getenv("LLM_TTS_HARD_FLUSH_CHARS", "80"))
 
 
 settings = Settings()

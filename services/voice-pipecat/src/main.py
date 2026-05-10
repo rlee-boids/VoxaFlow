@@ -35,6 +35,8 @@ tts_provider = build_tts_provider(
     qwen_url=settings.qwen_tts_base_url,
     qwen_speaker=settings.qwen_tts_speaker,
 )
+greeting_frames_cache: list[str] | None = None
+interstitial_frames_cache: list[str] | None = None
 
 metrics = {
     "requests_total": 0,
@@ -97,6 +99,7 @@ async def _send_audio_frames(
 # LLM streaming helper — yields sentence-boundary chunks for low TTFB TTS
 # ---------------------------------------------------------------------------
 _SENTENCE_ENDS = frozenset(".!?")
+_SOFT_BREAKS = frozenset(",;:\n")
 
 
 def _select_mock_assistant_turn(conversation_history: list[dict[str, Any]]) -> str:
@@ -148,6 +151,30 @@ async def _stream_llm_response(
     except Exception as exc:
         logger.error("LLM stream error: %s", exc)
     return full_text.strip()
+
+
+def _split_flushable_prefix(text: str) -> tuple[str, str]:
+    pending = text
+    # Prefer sentence boundaries first.
+    sentence_cut = max((pending.rfind(mark) for mark in _SENTENCE_ENDS), default=-1)
+    if sentence_cut >= 0:
+        cut = sentence_cut + 1
+        return pending[:cut].strip(), pending[cut:].lstrip()
+
+    if len(pending) >= settings.llm_tts_hard_flush_chars:
+        for marker in (" ", ",", ";", ":"):
+            idx = pending.rfind(marker, 0, settings.llm_tts_hard_flush_chars)
+            if idx > 20:
+                return pending[:idx].strip(), pending[idx:].lstrip()
+        return pending[:settings.llm_tts_hard_flush_chars].strip(), pending[settings.llm_tts_hard_flush_chars:].lstrip()
+
+    if len(pending) >= settings.llm_tts_soft_flush_chars:
+        for marker in (" ", ",", ";", ":"):
+            idx = pending.rfind(marker)
+            if idx > 20:
+                return pending[:idx].strip(), pending[idx:].lstrip()
+
+    return "", pending
 
 
 async def _llm_and_tts(
@@ -212,10 +239,12 @@ async def _llm_and_tts(
                             continue
                         full_text += token
                         pending += token
-                        # Flush at sentence boundaries for low-latency TTS starts
-                        if any(c in _SENTENCE_ENDS for c in token):
-                            await _flush_sentence(pending)
-                            pending = ""
+                        while True:
+                            flush_text, remainder = _split_flushable_prefix(pending)
+                            if not flush_text:
+                                break
+                            await _flush_sentence(flush_text)
+                            pending = remainder
                     except Exception as e:
                         logger.debug("SSE parse skip: %s", e)
     except Exception as exc:
@@ -231,6 +260,17 @@ async def _llm_and_tts(
         ttft_ms, total_ms, full_text[:80],
     )
     return full_text.strip()
+
+
+async def _generate_llm_response(conversation_history: list[dict[str, Any]]) -> str:
+    metrics["llm_calls_total"] += 1
+    t_start = time.monotonic()
+    full_text = await _stream_llm_response(conversation_history)
+    total_ms = int((time.monotonic() - t_start) * 1000)
+    logger.info("llm text complete: total_ms=%d text=%r", total_ms, full_text[:80])
+    if not full_text.strip():
+        raise RuntimeError("llm_empty_response")
+    return full_text
 
 # ---------------------------------------------------------------------------
 # HTTP endpoints
@@ -325,31 +365,64 @@ async def twilio_media_stream(websocket: WebSocket) -> None:
         logger.info("STT transcript: %r", transcript)
         conversation_history.append({"role": "user", "content": transcript})
 
-        # 2. LLM → 3. TTS (sentence-streamed)
+        # 2. LLM → 3. TTS
         if settings.mock_conversation_enabled:
             assistant_text = _select_mock_assistant_turn(conversation_history)
             metrics["tts_calls_total"] += 1
-            frames = await tts_provider.synthesize_mulaw_frames(assistant_text)
+            frames = await tts_provider.synthesize_mulaw_frames(
+                assistant_text,
+                instruct_override=settings.qwen_tts_default_instruct,
+            )
             await _send_audio_frames(websocket, frames, stream_sid)
         else:
-            assistant_text = await _llm_and_tts(conversation_history, websocket, stream_sid)
+            if settings.tts_provider == "qwen":
+                llm_task = asyncio.create_task(_generate_llm_response(conversation_history))
+                if settings.send_interstitial_before_llm and interstitial_frames_cache:
+                    await _send_audio_frames(websocket, interstitial_frames_cache, stream_sid)
+                assistant_text = await llm_task
+                if assistant_text:
+                    metrics["tts_calls_total"] += 1
+                    try:
+                        async for frame_batch in tts_provider.stream_mulaw_frames(
+                            assistant_text,
+                            instruct_override=settings.qwen_tts_default_instruct,
+                        ):
+                            await _send_audio_frames(websocket, frame_batch, stream_sid)
+                    except Exception as exc:
+                        logger.warning("Qwen streaming TTS failed, falling back to buffered TTS: %s", exc)
+                        frames = await tts_provider.synthesize_mulaw_frames(
+                            assistant_text,
+                            instruct_override=settings.qwen_tts_default_instruct,
+                        )
+                        await _send_audio_frames(websocket, frames, stream_sid)
+            else:
+                assistant_text = await _llm_and_tts(conversation_history, websocket, stream_sid)
             if not assistant_text:
                 logger.warning("LLM returned empty response; using mock assistant fallback")
                 assistant_text = _select_mock_assistant_turn(conversation_history)
                 metrics["tts_calls_total"] += 1
-                frames = await tts_provider.synthesize_mulaw_frames(assistant_text)
+                frames = await tts_provider.synthesize_mulaw_frames(
+                    assistant_text,
+                    instruct_override=settings.qwen_tts_default_instruct,
+                )
                 await _send_audio_frames(websocket, frames, stream_sid)
         if assistant_text:
             conversation_history.append({"role": "assistant", "content": assistant_text})
 
     async def _send_greeting() -> None:
         """Send static greeting text directly to TTS — no LLM call needed."""
+        global greeting_frames_cache
         greeting = settings.greeting_assistant_text
         if not greeting:
             return
         try:
-            metrics["tts_calls_total"] += 1
-            frames = await tts_provider.synthesize_mulaw_frames(greeting)
+            if greeting_frames_cache is None:
+                metrics["tts_calls_total"] += 1
+                greeting_frames_cache = await tts_provider.synthesize_mulaw_frames(
+                    greeting,
+                    instruct_override=settings.qwen_tts_default_instruct,
+                )
+            frames = greeting_frames_cache
             await _send_audio_frames(websocket, frames, stream_sid)
             logger.info("Greeting sent: %r", greeting)
         except Exception as exc:
@@ -381,15 +454,13 @@ async def twilio_media_stream(websocket: WebSocket) -> None:
                     "twilio-media start streamSid=%s callSid=%s",
                     stream_sid, call_sid,
                 )
+                if not greeting_sent:
+                    greeting_sent = True
+                    asyncio.create_task(_send_greeting())
 
             elif event_type == "media":
                 metrics["ws_media_in_total"] += 1
                 media_payload = message.get("media", {}).get("payload", "")
-
-                # Send greeting on the very first media packet
-                if not greeting_sent:
-                    greeting_sent = True
-                    asyncio.create_task(_send_greeting())
 
                 if media_payload:
                     utterance_pcm16 = audio_buf.push_frame(media_payload)
@@ -412,3 +483,47 @@ async def twilio_media_stream(websocket: WebSocket) -> None:
             await websocket.close()
         except Exception:
             pass
+
+
+@app.on_event("startup")
+async def startup_event() -> None:
+    async def _warmup() -> None:
+        global greeting_frames_cache
+        global interstitial_frames_cache
+        try:
+            greeting = settings.greeting_assistant_text.strip()
+            if greeting:
+                metrics["tts_calls_total"] += 1
+                greeting_frames_cache = await tts_provider.synthesize_mulaw_frames(
+                    greeting,
+                    instruct_override=settings.qwen_tts_default_instruct,
+                )
+                logger.info("Greeting TTS warmup complete")
+        except Exception as exc:
+            logger.warning("Greeting TTS warmup failed: %s", exc)
+
+        try:
+            interstitial = settings.interstitial_assistant_text.strip()
+            if interstitial:
+                metrics["tts_calls_total"] += 1
+                interstitial_frames_cache = await tts_provider.synthesize_mulaw_frames(
+                    interstitial,
+                    instruct_override=settings.qwen_tts_default_instruct,
+                )
+                logger.info("Interstitial TTS warmup complete")
+        except Exception as exc:
+            logger.warning("Interstitial TTS warmup failed: %s", exc)
+
+        if settings.mock_conversation_enabled:
+            return
+
+        for attempt in range(1, 7):
+            try:
+                await _generate_llm_response([{"role": "user", "content": "Hello."}])
+                logger.info("LLM warmup complete on attempt %d", attempt)
+                break
+            except Exception as exc:
+                logger.warning("LLM warmup attempt %d failed: %s", attempt, exc)
+                await asyncio.sleep(10)
+
+    asyncio.create_task(_warmup())

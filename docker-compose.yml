@@ -135,7 +135,7 @@ services:
       # TTS
       TTS_PROVIDER: ${TTS_PROVIDER:-qwen}
       QWEN_TTS_BASE_URL: ${QWEN_TTS_BASE_URL:-http://qwen-tts:7200}
-      QWEN_TTS_SPEAKER: ${QWEN_TTS_SPEAKER:-ryan}
+      QWEN_TTS_SPEAKER: ${QWEN_TTS_SPEAKER:-Aiden}
       KOKORO_BASE_URL: ${KOKORO_BASE_URL:-http://kokoro-tts:7100}
       KOKORO_VOICE: ${KOKORO_VOICE:-am_michael}
       KOKORO_REQUIRE_NEURAL: ${KOKORO_REQUIRE_NEURAL:-true}
@@ -144,16 +144,18 @@ services:
       QWEN_VLLM_MODEL: ${QWEN_VLLM_MODEL:-Qwen/Qwen2.5-7B-Instruct}
       # Greeting
       GREETING_ASSISTANT_TEXT: ${GREETING_ASSISTANT_TEXT:-Thank you for calling VoxaFlow. Please hold while I connect you.}
+      INTERSTITIAL_ASSISTANT_TEXT: ${INTERSTITIAL_ASSISTANT_TEXT:-One moment please.}
+      SEND_INTERSTITIAL_BEFORE_LLM: ${SEND_INTERSTITIAL_BEFORE_LLM:-true}
       # STT
       WHISPER_STT_BASE_URL: ${WHISPER_STT_BASE_URL:-http://whisper-stt:7300}
       STT_ENABLED: ${STT_ENABLED:-true}
       STT_TIMEOUT_SECONDS: ${STT_TIMEOUT_SECONDS:-15.0}
       # VAD
       VAD_SPEECH_THRESHOLD: ${VAD_SPEECH_THRESHOLD:-0.5}
-      VAD_SILENCE_THRESHOLD_MS: ${VAD_SILENCE_THRESHOLD_MS:-700}
+      VAD_SILENCE_THRESHOLD_MS: "450"
       VAD_PRE_ROLL_MS: ${VAD_PRE_ROLL_MS:-200}
       # LLM tuning
-      LLM_MAX_TOKENS: ${LLM_MAX_TOKENS:-80}
+      LLM_MAX_TOKENS: "48"
       LLM_TEMPERATURE: ${LLM_TEMPERATURE:-0.2}
       LLM_TIMEOUT_SECONDS: ${LLM_TIMEOUT_SECONDS:-10.0}
     depends_on:
@@ -214,13 +216,18 @@ services:
     environment:
       QWEN_TTS_HOST: ${QWEN_TTS_HOST:-0.0.0.0}
       QWEN_TTS_PORT: ${QWEN_TTS_PORT:-7200}
-      QWEN_TTS_MODEL: ${QWEN_TTS_MODEL:-/models/qwen-tts}
-      QWEN_TTS_DEVICE: ${QWEN_TTS_DEVICE:-cuda:1}
+      QWEN_TTS_MODEL: ${QWEN_TTS_MODEL:-Qwen/Qwen3-TTS-12Hz-0.6B-CustomVoice}
+      QWEN_TTS_DEVICE: ${QWEN_TTS_DEVICE:-cuda:0}
       QWEN_TTS_DTYPE: ${QWEN_TTS_DTYPE:-bfloat16}
-      QWEN_TTS_SPEAKER: ${QWEN_TTS_SPEAKER:-ryan}
-      QWEN_TTS_LOCAL_ONLY: ${QWEN_TTS_LOCAL_ONLY:-true}
+      QWEN_TTS_SPEAKER: ${QWEN_TTS_SPEAKER:-Aiden}
+      QWEN_TTS_LOCAL_ONLY: ${QWEN_TTS_LOCAL_ONLY:-false}
+      QWEN_TTS_ATTN_IMPL: ${QWEN_TTS_ATTN_IMPL:-sdpa}
+      QWEN_TTS_EMIT_EVERY_FRAMES: ${QWEN_TTS_EMIT_EVERY_FRAMES:-6}
+      QWEN_TTS_DECODE_WINDOW_FRAMES: ${QWEN_TTS_DECODE_WINDOW_FRAMES:-80}
+      QWEN_TTS_USE_COMPILE: ${QWEN_TTS_USE_COMPILE:-false}
+      QWEN_TTS_USE_CUDA_GRAPHS: ${QWEN_TTS_USE_CUDA_GRAPHS:-false}
     volumes:
-      - "${QWEN_TTS_MODEL_HOST_DIR:-/home/codex/models/qwen-tts}:/models/qwen-tts:ro"
+      - "${HF_CACHE_HOST_DIR:-/home/codex/.cache/huggingface}:/root/.cache/huggingface"
     expose:
       - "7200"
     deploy:
@@ -228,7 +235,7 @@ services:
         reservations:
           devices:
             - driver: nvidia
-              device_ids: [ "1" ]
+              device_ids: [ "0" ]
               capabilities: [ gpu ]
 
   # ---------------------------------------------------------------------------
@@ -262,8 +269,10 @@ services:
     environment:
       QWEN_VLLM_PORT: ${QWEN_VLLM_PORT:-8000}
       QWEN_VLLM_MODEL: ${QWEN_VLLM_MODEL:-Qwen/Qwen2.5-7B-Instruct}
-      QWEN_QUANTIZATION: ${QWEN_QUANTIZATION:-fp8}
+      QWEN_QUANTIZATION: ${QWEN_QUANTIZATION-}
+      QWEN_VLLM_DTYPE: ${QWEN_VLLM_DTYPE:-bfloat16}
       QWEN_GPU_MEMORY_UTILIZATION: ${QWEN_GPU_MEMORY_UTILIZATION:-0.90}
+      VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS: ${VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS:-0}
       QWEN_MAX_MODEL_LEN: ${QWEN_MAX_MODEL_LEN:-4096}
       QWEN_TENSOR_PARALLEL_SIZE: ${QWEN_TENSOR_PARALLEL_SIZE:-2}
       HUGGING_FACE_HUB_TOKEN: ${HUGGING_FACE_HUB_TOKEN:-}
@@ -279,7 +288,7 @@ services:
               count: all
               capabilities: [ gpu ]
     healthcheck:
-      test: [ "CMD-SHELL", "wget --spider -q http://localhost:8000/healthz || exit 1" ]
+      test: [ "CMD-SHELL", "wget --spider -q http://localhost:8000/health || exit 1" ]
       interval: 15s
       timeout: 10s
       retries: 10

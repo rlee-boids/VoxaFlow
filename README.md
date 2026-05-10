@@ -11,6 +11,8 @@ Code workflow is:
 Primary scripts:
 - `./scripts/deploy_rtx01.sh sync`
 - `./scripts/deploy_rtx01_podman.sh status|logs`
+- `./scripts/rtx01_install_ngrok_service.sh`
+- `./scripts/rtx01_verify_ngrok_service.sh`
 
 Session checkpoint is tracked in `memory.md`.
 
@@ -30,6 +32,16 @@ Ingress routes:
 - `GET /pipecat/healthz` -> `voice-pipecat:7000/healthz`
 
 Twilio requires public TLS endpoints (`https://` and `wss://`).
+
+## Durable Tunnel On `rtx01`
+
+To keep the Twilio public edge alive across logouts and reboots on `rtx01`:
+- install the user service with `./scripts/rtx01_install_ngrok_service.sh`
+- verify it with `./scripts/rtx01_verify_ngrok_service.sh`
+
+The service uses `infra/systemd/voxaflow-ngrok.service` and reads `NGROK_LOCAL_PORT`
+from `~/.config/voxaflow/ngrok.env`. The ngrok auth token still comes from the host's
+existing ngrok config file.
 
 ## Local-Only Qwen TTS Mode
 
