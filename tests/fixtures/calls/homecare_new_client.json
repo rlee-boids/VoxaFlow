@@ -1,0 +1,9 @@
+{
+  "fixture": "homecare_new_client",
+  "task1_placeholder": true,
+  "transcriptTurns": [
+    "I am Sarah Lee and my phone number is 555-990-1000.",
+    "Patient name is Robert Lee.",
+    "We need home care starting next week."
+  ]
+}

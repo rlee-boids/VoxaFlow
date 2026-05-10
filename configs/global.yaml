@@ -1,0 +1,11 @@
+app:
+  name: VoxaFlow
+  environment: development
+runtime:
+  deployment_mode: cloud_saas
+  hardware_profile: rtx5090_single_node
+providers:
+  voice: twilio
+  llm: qwen_vllm
+  crm: postgres
+  workflow: n8n

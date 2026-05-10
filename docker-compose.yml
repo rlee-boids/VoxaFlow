@@ -1,0 +1,293 @@
+services:
+  reverse-proxy:
+    image: docker.io/library/caddy:2-alpine
+    container_name: voxaflow-reverse-proxy
+    restart: unless-stopped
+    ports:
+      - "${PUBLIC_HTTP_PORT:-80}:80"
+      - "${PUBLIC_HTTPS_PORT:-443}:443"
+    environment:
+      CLOUDFLARE_TUNNEL_HOSTNAME: ${CLOUDFLARE_TUNNEL_HOSTNAME:-}
+      NGROK_PUBLIC_URL: ${NGROK_PUBLIC_URL:-}
+    volumes:
+      - ./infra/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      backend-api:
+        condition: service_started
+      voice-pipecat:
+        condition: service_healthy
+    healthcheck:
+      test: [ "CMD-SHELL", "wget --spider -q http://localhost/healthz || exit 1" ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  postgres:
+    image: docker.io/library/postgres:16-alpine
+    container_name: voxaflow-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-voxaflow}
+      POSTGRES_USER: ${POSTGRES_USER:-voxaflow}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-CHANGE_ME_POSTGRES_PASSWORD}
+    #    ports:
+    #      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-voxaflow} -d ${POSTGRES_DB:-voxaflow}" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: docker.io/library/redis:7-alpine
+    container_name: voxaflow-redis
+    restart: unless-stopped
+    #    ports:
+    #      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  n8n:
+    image: docker.n8n.io/n8nio/n8n:latest
+    container_name: voxaflow-n8n
+    restart: unless-stopped
+    environment:
+      N8N_HOST: ${N8N_HOST:-localhost}
+      N8N_PORT: ${N8N_PORT:-5678}
+      N8N_PROTOCOL: ${N8N_PROTOCOL:-http}
+      N8N_EDITOR_BASE_URL: ${N8N_EDITOR_BASE_URL:-http://localhost:5678}
+      N8N_ENCRYPTION_KEY: ${N8N_ENCRYPTION_KEY:-CHANGE_ME_N8N_ENCRYPTION_KEY}
+    ports:
+      - "${N8N_PORT:-5678}:5678"
+    volumes:
+      - n8n_data:/home/node/.n8n
+    healthcheck:
+      test: [ "CMD-SHELL", "wget --spider -q http://localhost:5678/healthz || exit 1" ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  backend-api:
+    build:
+      context: ./services/backend-api
+      dockerfile: Dockerfile
+    container_name: voxaflow-backend-api
+    restart: unless-stopped
+    environment:
+      APP_ENV: ${APP_ENV:-development}
+      TZ: ${TZ:-America/Los_Angeles}
+      LOG_LEVEL: ${BACKEND_API_LOG_LEVEL:-info}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-voxaflow}:${POSTGRES_PASSWORD:-CHANGE_ME_POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-voxaflow}
+      REDIS_URL: redis://redis:6379
+      QWEN_VLLM_BASE_URL: ${QWEN_VLLM_BASE_URL:-http://qwen-vllm:8000}
+      TWILIO_PUBLIC_BASE_URL: ${TWILIO_PUBLIC_BASE_URL:-}
+      TWILIO_MEDIA_STREAM_URL: ${TWILIO_MEDIA_STREAM_URL:-}
+      TWILIO_VALIDATE_SIGNATURE: ${TWILIO_VALIDATE_SIGNATURE:-false}
+      TWILIO_GREETING_TEXT: ${TWILIO_GREETING_TEXT:-}
+      TWILIO_DEFAULT_TENANT_ID: ${TWILIO_DEFAULT_TENANT_ID:-tenant_unmapped}
+      TWILIO_DEFAULT_CLIENT_ID: ${TWILIO_DEFAULT_CLIENT_ID:-client_unmapped}
+      TWILIO_NUMBER_TENANT_CLIENT_MAP: ${TWILIO_NUMBER_TENANT_CLIENT_MAP:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    expose:
+      - "3000"
+
+  worker:
+    build:
+      context: ./services/worker
+      dockerfile: Dockerfile
+    container_name: voxaflow-worker
+    restart: unless-stopped
+    environment:
+      APP_ENV: ${APP_ENV:-development}
+      TZ: ${TZ:-America/Los_Angeles}
+      LOG_LEVEL: ${WORKER_LOG_LEVEL:-info}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-voxaflow}:${POSTGRES_PASSWORD:-CHANGE_ME_POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-voxaflow}
+      REDIS_URL: redis://redis:6379
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  voice-pipecat:
+    build:
+      context: ./services/voice-pipecat
+      dockerfile: Dockerfile
+    container_name: voxaflow-voice-pipecat
+    restart: unless-stopped
+    environment:
+      APP_ENV: ${APP_ENV:-development}
+      TZ: ${TZ:-America/Los_Angeles}
+      BACKEND_API_BASE_URL: ${BACKEND_API_BASE_URL:-http://backend-api:3000}
+      # TTS
+      TTS_PROVIDER: ${TTS_PROVIDER:-qwen}
+      QWEN_TTS_BASE_URL: ${QWEN_TTS_BASE_URL:-http://qwen-tts:7200}
+      QWEN_TTS_SPEAKER: ${QWEN_TTS_SPEAKER:-ryan}
+      KOKORO_BASE_URL: ${KOKORO_BASE_URL:-http://kokoro-tts:7100}
+      KOKORO_VOICE: ${KOKORO_VOICE:-am_michael}
+      KOKORO_REQUIRE_NEURAL: ${KOKORO_REQUIRE_NEURAL:-true}
+      # LLM
+      QWEN_VLLM_BASE_URL: ${QWEN_VLLM_BASE_URL:-http://qwen-vllm:8000}
+      QWEN_VLLM_MODEL: ${QWEN_VLLM_MODEL:-Qwen/Qwen2.5-7B-Instruct}
+      # Greeting
+      GREETING_ASSISTANT_TEXT: ${GREETING_ASSISTANT_TEXT:-Thank you for calling VoxaFlow. Please hold while I connect you.}
+      # STT
+      WHISPER_STT_BASE_URL: ${WHISPER_STT_BASE_URL:-http://whisper-stt:7300}
+      STT_ENABLED: ${STT_ENABLED:-true}
+      STT_TIMEOUT_SECONDS: ${STT_TIMEOUT_SECONDS:-15.0}
+      # VAD
+      VAD_SPEECH_THRESHOLD: ${VAD_SPEECH_THRESHOLD:-0.5}
+      VAD_SILENCE_THRESHOLD_MS: ${VAD_SILENCE_THRESHOLD_MS:-700}
+      VAD_PRE_ROLL_MS: ${VAD_PRE_ROLL_MS:-200}
+      # LLM tuning
+      LLM_MAX_TOKENS: ${LLM_MAX_TOKENS:-80}
+      LLM_TEMPERATURE: ${LLM_TEMPERATURE:-0.2}
+      LLM_TIMEOUT_SECONDS: ${LLM_TIMEOUT_SECONDS:-10.0}
+    depends_on:
+      backend-api:
+        condition: service_started
+      whisper-stt:
+        condition: service_healthy
+      qwen-tts:
+        condition: service_started
+    expose:
+      - "7000"
+    healthcheck:
+      test: [ "CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:7000/healthz', timeout=2)\" || exit 1" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ---------------------------------------------------------------------------
+  # ASR: faster-whisper (local, GPU-accelerated)
+  # ---------------------------------------------------------------------------
+  whisper-stt:
+    build:
+      context: ./services/whisper-stt
+      dockerfile: Dockerfile
+    container_name: voxaflow-whisper-stt
+    restart: unless-stopped
+    environment:
+      WHISPER_MODEL_SIZE: ${WHISPER_MODEL_SIZE:-base}
+      WHISPER_DEVICE: ${WHISPER_DEVICE:-cuda}
+      WHISPER_COMPUTE_TYPE: ${WHISPER_COMPUTE_TYPE:-float16}
+      WHISPER_LANGUAGE: ${WHISPER_LANGUAGE:-en}
+      WHISPER_BEAM_SIZE: ${WHISPER_BEAM_SIZE:-5}
+    expose:
+      - "7300"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: [ "0" ]
+              capabilities: [ gpu ]
+    healthcheck:
+      test: [ "CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:7300/healthz', timeout=2)\" || exit 1" ]
+      interval: 15s
+      timeout: 5s
+      retries: 8
+      start_period: 60s
+
+  # ---------------------------------------------------------------------------
+  # TTS: Qwen TTS (local neural, primary)
+  # ---------------------------------------------------------------------------
+  qwen-tts:
+    build:
+      context: ./services/qwen-tts
+      dockerfile: Dockerfile
+    container_name: voxaflow-qwen-tts
+    restart: unless-stopped
+    environment:
+      QWEN_TTS_HOST: ${QWEN_TTS_HOST:-0.0.0.0}
+      QWEN_TTS_PORT: ${QWEN_TTS_PORT:-7200}
+      QWEN_TTS_MODEL: ${QWEN_TTS_MODEL:-/models/qwen-tts}
+      QWEN_TTS_DEVICE: ${QWEN_TTS_DEVICE:-cuda:1}
+      QWEN_TTS_DTYPE: ${QWEN_TTS_DTYPE:-bfloat16}
+      QWEN_TTS_SPEAKER: ${QWEN_TTS_SPEAKER:-ryan}
+      QWEN_TTS_LOCAL_ONLY: ${QWEN_TTS_LOCAL_ONLY:-true}
+    volumes:
+      - "${QWEN_TTS_MODEL_HOST_DIR:-/home/codex/models/qwen-tts}:/models/qwen-tts:ro"
+    expose:
+      - "7200"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: [ "1" ]
+              capabilities: [ gpu ]
+
+  # ---------------------------------------------------------------------------
+  # TTS: Kokoro (open-source fallback TTS)
+  # ---------------------------------------------------------------------------
+  kokoro-tts:
+    build:
+      context: ./services/kokoro-tts
+      dockerfile: Dockerfile
+    container_name: voxaflow-kokoro-tts
+    restart: unless-stopped
+    environment:
+      KOKORO_HOST: ${KOKORO_HOST:-0.0.0.0}
+      KOKORO_PORT: ${KOKORO_PORT:-7100}
+      KOKORO_USE_NEURAL: ${KOKORO_USE_NEURAL:-true}
+      KOKORO_LANG_CODE: ${KOKORO_LANG_CODE:-a}
+      KOKORO_SPEED: ${KOKORO_SPEED:-0.9}
+    expose:
+      - "7100"
+
+  # ---------------------------------------------------------------------------
+  # LLM: vLLM (Qwen2.5-7B-Instruct by default, standard instruct, text-only)
+  # ---------------------------------------------------------------------------
+  qwen-vllm:
+    build:
+      context: ./services/qwen-vllm
+      dockerfile: Dockerfile
+    container_name: voxaflow-qwen-vllm
+    restart: unless-stopped
+    ipc: host
+    environment:
+      QWEN_VLLM_PORT: ${QWEN_VLLM_PORT:-8000}
+      QWEN_VLLM_MODEL: ${QWEN_VLLM_MODEL:-Qwen/Qwen2.5-7B-Instruct}
+      QWEN_QUANTIZATION: ${QWEN_QUANTIZATION:-fp8}
+      QWEN_GPU_MEMORY_UTILIZATION: ${QWEN_GPU_MEMORY_UTILIZATION:-0.90}
+      QWEN_MAX_MODEL_LEN: ${QWEN_MAX_MODEL_LEN:-4096}
+      QWEN_TENSOR_PARALLEL_SIZE: ${QWEN_TENSOR_PARALLEL_SIZE:-2}
+      HUGGING_FACE_HUB_TOKEN: ${HUGGING_FACE_HUB_TOKEN:-}
+    volumes:
+      - "${HF_CACHE_HOST_DIR:-/home/codex/.cache/huggingface}:/root/.cache/huggingface"
+    ports:
+      - "${QWEN_VLLM_PORT:-8000}:8000"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [ gpu ]
+    healthcheck:
+      test: [ "CMD-SHELL", "wget --spider -q http://localhost:8000/healthz || exit 1" ]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 180s
+
+volumes:
+  caddy_data:
+  caddy_config:
+  postgres_data:
+  redis_data:
+  n8n_data:

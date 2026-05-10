@@ -1,0 +1,3 @@
+provider:
+  id: workflow_n8n
+  task1_placeholder: true

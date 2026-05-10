@@ -1,0 +1,12 @@
+{
+  "fixture": "transportation_new_ride",
+  "task1_placeholder": true,
+  "transcriptTurns": [
+    "My name is John Carter and my phone number is 555-222-7788.",
+    "Passenger name is Mary Carter.",
+    "Pickup address is 123 Main St, Sacramento.",
+    "Dropoff address is 900 Clinic Ave, Sacramento.",
+    "Appointment is tomorrow at 2pm.",
+    "Wheelchair mobility needs and this is round trip."
+  ]
+}

@@ -1,0 +1,3 @@
+provider:
+  id: agent_openclaw
+  task1_placeholder: true

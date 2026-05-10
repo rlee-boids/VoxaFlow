@@ -1,0 +1,30 @@
+{
+  "last_reminder": 0,
+  "cached_at": 1778032152478,
+  "version": "6.17.1",
+  "cli_path": "/Users/fang/Projects/VoxaFlow/services/backend-api/node_modules/.bin/prisma",
+  "output": {
+    "product": "prisma",
+    "previous_version": "6.17.1",
+    "checkpoint_version": 4,
+    "local_timestamp_without_timezone": "2026-05-05T18:49:12Z",
+    "current_version": "7.8.0",
+    "current_release_date": 1776867418,
+    "client_event_id": "46bb8f75-c416-4e87-a972-5d218844ea56",
+    "current_download_url": "https://github.com/prisma/prisma",
+    "package": "prisma",
+    "release_tag": "latest",
+    "install_command": "npm install --save-dev prisma",
+    "schema_providers": [
+      "postgresql"
+    ],
+    "schema_preview_features": [],
+    "schema_generators_providers": [
+      "prisma-client-js"
+    ],
+    "current_changelog_url": "https://github.com/prisma/prisma",
+    "outdated": true,
+    "project_website": "https://prisma.io",
+    "alerts": []
+  }
+}

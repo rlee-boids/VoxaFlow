@@ -1,0 +1,5 @@
+fastapi==0.115.0
+uvicorn==0.30.6
+faster-whisper>=1.1.0
+numpy>=1.24.0
+onnxruntime>=1.18.0

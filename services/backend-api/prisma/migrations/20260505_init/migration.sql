@@ -1,0 +1,3 @@
+-- Initial Prisma migration placeholder for Task 5.
+-- Run `npx prisma migrate dev --name init` against a configured Postgres instance
+-- to generate canonical SQL from schema.prisma in your target environment.

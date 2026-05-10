@@ -1,0 +1,3 @@
+provider:
+  id: crm_postgres
+  task1_placeholder: true

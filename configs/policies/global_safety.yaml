@@ -1,0 +1,3 @@
+policy:
+  id: global_safety
+  task1_placeholder: true

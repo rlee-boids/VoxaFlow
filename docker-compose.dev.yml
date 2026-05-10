@@ -1,0 +1,39 @@
+services:
+  backend-api:
+    environment:
+      NODE_ENV: development
+    volumes:
+      - ./services/backend-api:/app
+      - backend_api_node_modules:/app/node_modules
+
+  worker:
+    environment:
+      NODE_ENV: development
+    volumes:
+      - ./services/worker:/app
+      - worker_node_modules:/app/node_modules
+
+  voice-pipecat:
+    environment:
+      PYTHONUNBUFFERED: "1"
+    volumes:
+      - ./services/voice-pipecat:/app
+
+  qwen-vllm:
+    profiles: ["gpu"]
+
+  kokoro-tts:
+    environment:
+      PYTHONUNBUFFERED: "1"
+    volumes:
+      - ./services/kokoro-tts:/app
+
+  qwen-tts:
+    environment:
+      PYTHONUNBUFFERED: "1"
+    volumes:
+      - ./services/qwen-tts:/app
+
+volumes:
+  backend_api_node_modules:
+  worker_node_modules:

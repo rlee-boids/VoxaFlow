@@ -1,0 +1,16 @@
+services:
+  backend-api:
+    image: ${BACKEND_API_IMAGE:?set BACKEND_API_IMAGE}
+    build: {}
+
+  worker:
+    image: ${WORKER_IMAGE:?set WORKER_IMAGE}
+    build: {}
+
+  voice-pipecat:
+    image: ${VOICE_PIPECAT_IMAGE:?set VOICE_PIPECAT_IMAGE}
+    build: {}
+
+  qwen-tts:
+    image: ${QWEN_TTS_IMAGE:?set QWEN_TTS_IMAGE}
+    build: {}

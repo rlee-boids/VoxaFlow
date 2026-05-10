@@ -1,0 +1,3 @@
+provider:
+  id: llm_qwen_vllm
+  task1_placeholder: true

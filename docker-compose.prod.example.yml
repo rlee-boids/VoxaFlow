@@ -1,0 +1,24 @@
+services:
+  postgres:
+    restart: always
+    ports: []
+
+  redis:
+    restart: always
+    ports: []
+
+  n8n:
+    restart: always
+
+  backend-api:
+    restart: always
+
+  worker:
+    restart: always
+
+  voice-pipecat:
+    restart: always
+
+  qwen-vllm:
+    restart: always
+    profiles: ["gpu"]

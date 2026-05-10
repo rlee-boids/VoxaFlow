@@ -1,0 +1,193 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Tenant {
+  id              String        @id @default(cuid())
+  name            String
+  status          String
+  defaultVertical String?
+  plan            String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  clients         Client[]
+  callSessions    CallSession[]
+  intakeRecords   IntakeRecord[]
+  tasks           Task[]
+  approvals       Approval[]
+  workflowRuns    WorkflowRun[]
+  auditLogs       AuditLog[]
+  usageRecords    UsageRecord[]
+
+  @@index([name])
+}
+
+model Client {
+  id           String   @id @default(cuid())
+  tenantId     String
+  businessName String
+  vertical     String
+  timezone     String
+  settingsJson Json?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  tenant       Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([tenantId, vertical])
+}
+
+model CallSession {
+  id                     String        @id @default(cuid())
+  tenantId               String
+  clientId               String?
+  providerCallId         String?
+  fromNumber             String?
+  toNumber               String?
+  status                 String
+  intent                 String?
+  confidence             Float?
+  emergencyDetected      Boolean       @default(false)
+  humanTransferRequested Boolean       @default(false)
+  humanTransferCompleted Boolean       @default(false)
+  startedAt              DateTime      @default(now())
+  endedAt                DateTime?
+  durationSeconds        Int?
+  summary                String?
+  recordingUrl           String?
+  transcriptUrl          String?
+  metadataJson           Json?
+  tenant                 Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  intakeRecords          IntakeRecord[]
+  tasks                  Task[]
+  approvals              Approval[]
+  workflowRuns           WorkflowRun[]
+  usageRecords           UsageRecord[]
+
+  @@index([tenantId])
+  @@index([tenantId, startedAt])
+}
+
+model IntakeRecord {
+  id                 String       @id @default(cuid())
+  tenantId           String
+  callSessionId      String
+  vertical           String
+  intent             String
+  status             String
+  fieldsJson         Json
+  summary            String?
+  requiresHumanReview Boolean     @default(false)
+  assignedToUserId   String?
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
+  tenant             Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  callSession        CallSession  @relation(fields: [callSessionId], references: [id], onDelete: Cascade)
+  tasks              Task[]
+
+  @@index([tenantId])
+  @@index([tenantId, intent])
+}
+
+model Task {
+  id               String       @id @default(cuid())
+  tenantId         String
+  callSessionId    String?
+  intakeRecordId   String?
+  type             String
+  status           String
+  priority         String
+  title            String
+  description      String?
+  dueAt            DateTime?
+  assignedToUserId String?
+  payloadJson      Json?
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+  tenant           Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  callSession      CallSession? @relation(fields: [callSessionId], references: [id], onDelete: SetNull)
+  intakeRecord     IntakeRecord? @relation(fields: [intakeRecordId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId])
+  @@index([tenantId, status])
+}
+
+model Approval {
+  id               String       @id @default(cuid())
+  tenantId         String
+  callSessionId    String?
+  requestedAction  String
+  riskLevel        String
+  reason           String
+  payloadJson      Json?
+  status           String
+  approvedByUserId String?
+  approvedAt       DateTime?
+  rejectedReason   String?
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+  tenant           Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  callSession      CallSession? @relation(fields: [callSessionId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId])
+  @@index([tenantId, status])
+}
+
+model WorkflowRun {
+  id              String       @id @default(cuid())
+  tenantId        String
+  callSessionId   String?
+  executionPlanId String?
+  provider        String
+  workflowName    String
+  status          String
+  inputJson       Json?
+  outputJson      Json?
+  error           String?
+  startedAt       DateTime     @default(now())
+  completedAt     DateTime?
+  tenant          Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  callSession     CallSession? @relation(fields: [callSessionId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId])
+  @@index([tenantId, provider])
+}
+
+model AuditLog {
+  id          String   @id @default(cuid())
+  tenantId    String
+  actorType   String
+  actorId     String?
+  action      String
+  targetType  String
+  targetId    String?
+  reason      String?
+  metadataJson Json?
+  createdAt   DateTime @default(now())
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([tenantId, action])
+}
+
+model UsageRecord {
+  id           String      @id @default(cuid())
+  tenantId     String
+  callSessionId String?
+  metric       String
+  quantity     Float
+  unit         String
+  provider     String
+  costEstimate Float?
+  createdAt    DateTime    @default(now())
+  tenant       Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  callSession  CallSession? @relation(fields: [callSessionId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId])
+  @@index([tenantId, metric])
+}

@@ -1,0 +1,3 @@
+policy:
+  id: tool_permissions
+  task1_placeholder: true

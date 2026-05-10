@@ -1,0 +1,27 @@
+:80 {
+  encode gzip
+
+  @health path /healthz
+  handle @health {
+    respond 200
+  }
+
+  @twilioMedia path /twilio-media*
+  handle @twilioMedia {
+    reverse_proxy voice-pipecat:7000
+  }
+
+  @inboundCall path /twilio/inbound-call*
+  handle @inboundCall {
+    reverse_proxy backend-api:3000
+  }
+
+  @pipecatHealth path /pipecat/healthz
+  handle @pipecatHealth {
+    reverse_proxy voice-pipecat:7000
+  }
+
+  handle {
+    respond "voxaflow reverse proxy up" 200
+  }
+}

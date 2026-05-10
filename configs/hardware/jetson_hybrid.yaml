@@ -1,0 +1,3 @@
+hardware:
+  id: jetson_hybrid
+  task1_placeholder: true

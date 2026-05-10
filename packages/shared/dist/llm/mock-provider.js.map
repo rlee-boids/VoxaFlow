@@ -1,0 +1,1 @@
+{"version":3,"file":"mock-provider.js","sourceRoot":"","sources":["../../src/llm/mock-provider.ts"],"names":[],"mappings":"AAGA,MAAM,OAAO,eAAe;IAGG;IAFb,EAAE,GAAG,UAAU,CAAC;IAEhC,YAA6B,YAAqB;QAArB,iBAAY,GAAZ,YAAY,CAAS;IAAG,CAAC;IAEtD,KAAK,CAAC,cAAc,CAAI,QAAoB,EAAE,MAAsB;QAClE,OAAO,MAAM,CAAC,KAAK,CAAC,IAAI,CAAC,YAAY,CAAC,CAAC;IACzC,CAAC;CACF"}
