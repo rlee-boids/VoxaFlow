@@ -145,7 +145,8 @@ services:
       # Greeting
       GREETING_ASSISTANT_TEXT: ${GREETING_ASSISTANT_TEXT:-Thank you for calling VoxaFlow. Please hold while I connect you.}
       INTERSTITIAL_ASSISTANT_TEXT: ${INTERSTITIAL_ASSISTANT_TEXT:-One moment please.}
-      SEND_INTERSTITIAL_BEFORE_LLM: ${SEND_INTERSTITIAL_BEFORE_LLM:-true}
+      SEND_INTERSTITIAL_BEFORE_LLM: ${SEND_INTERSTITIAL_BEFORE_LLM:-false}
+      SYSTEM_PROMPT: ${SYSTEM_PROMPT:-}
       # STT
       WHISPER_STT_BASE_URL: ${WHISPER_STT_BASE_URL:-http://whisper-stt:7300}
       STT_ENABLED: ${STT_ENABLED:-true}

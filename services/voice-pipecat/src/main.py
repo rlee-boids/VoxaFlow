@@ -116,11 +116,7 @@ async def _stream_llm_response(
     Stream text from vLLM and yield completed sentence chunks via a queue.
     Returns the full accumulated response text.
     """
-    system_prompt = (
-        "You are a professional front-desk phone assistant. "
-        "Be concise, clear, and helpful. Ask one follow-up question at a time. "
-        "Keep replies under two sentences. Reply in the same language the caller used."
-    )
+    system_prompt = settings.system_prompt
     payload = {
         "model": settings.qwen_vllm_model,
         "messages": [{"role": "system", "content": system_prompt}] + conversation_history[-6:],
@@ -186,11 +182,7 @@ async def _llm_and_tts(
     Run LLM (text streaming) → sentence-chunked TTS → Twilio audio out.
     Returns the full assistant text.
     """
-    system_prompt = (
-        "You are a professional front-desk phone assistant. "
-        "Be concise, clear, and helpful. Ask one follow-up question at a time. "
-        "Keep replies under two sentences. Reply in the same language the caller used."
-    )
+    system_prompt = settings.system_prompt
     payload = {
         "model": settings.qwen_vllm_model,
         "messages": [{"role": "system", "content": system_prompt}] + conversation_history[-6:],
@@ -398,8 +390,9 @@ async def twilio_media_stream(websocket: WebSocket) -> None:
             else:
                 assistant_text = await _llm_and_tts(conversation_history, websocket, stream_sid)
             if not assistant_text:
-                logger.warning("LLM returned empty response; using mock assistant fallback")
-                assistant_text = _select_mock_assistant_turn(conversation_history)
+                # Avoid silently switching into business-biased mock responses in production.
+                logger.warning("LLM returned empty response; sending generic apology")
+                assistant_text = "Sorry, I didn’t catch that. Could you please repeat?"
                 metrics["tts_calls_total"] += 1
                 frames = await tts_provider.synthesize_mulaw_frames(
                     assistant_text,
@@ -422,7 +415,11 @@ async def twilio_media_stream(websocket: WebSocket) -> None:
                     greeting,
                     instruct_override=settings.qwen_tts_default_instruct,
                 )
-            frames = greeting_frames_cache
+            # Twilio playback can glitch if the very first outbound audio arrives "too hot".
+            # Prepending a short mu-law silence pad avoids the initial buzz on some carriers.
+            silence_frame = base64.b64encode(bytes([0xFF]) * 160).decode("ascii")
+            silence_pad = [silence_frame] * 5  # 5 * 20ms = 100ms @ 8kHz mu-law
+            frames = silence_pad + greeting_frames_cache
             await _send_audio_frames(websocket, frames, stream_sid)
             logger.info("Greeting sent: %r", greeting)
         except Exception as exc:

@@ -94,6 +94,14 @@ class Settings:
     # ------------------------------------------------------------------
     # LLM tuning
     # ------------------------------------------------------------------
+    system_prompt: str = os.getenv(
+        "SYSTEM_PROMPT",
+        (
+            "You are a helpful voice assistant on a phone call. "
+            "Be concise, clear, and natural. Ask one follow-up question at a time. "
+            "Reply in the same language the caller used."
+        ),
+    )
     llm_max_tokens: int = int(os.getenv("LLM_MAX_TOKENS", "48"))
     llm_temperature: float = float(os.getenv("LLM_TEMPERATURE", "0.2"))
     llm_timeout_seconds: float = float(os.getenv("LLM_TIMEOUT_SECONDS", "10.0"))

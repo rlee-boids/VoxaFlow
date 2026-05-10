@@ -144,10 +144,12 @@ class TranscribeResponse(BaseModel):
 # ---------------------------------------------------------------------------
 @app.on_event("startup")
 async def _startup() -> None:
-    # Eagerly trigger model load in a thread so the first request is fast.
+    # Kick off model load in the background.
+    # Do not block startup, otherwise the service is unreachable (and callers see ConnectError)
+    # while the model downloads/initializes.
     import asyncio
-    loop = asyncio.get_event_loop()
-    await loop.run_in_executor(None, runtime.is_ready)
+    loop = asyncio.get_running_loop()
+    loop.run_in_executor(None, runtime.is_ready)
 
 
 @app.get("/healthz")

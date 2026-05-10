@@ -1,0 +1,16 @@
+[Unit]
+Description=VoxaFlow podman-compose stack
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=%h/VoxaFlow
+ExecStart=/bin/bash -lc '%h/VoxaFlow/scripts/rtx01_stack_up.sh'
+ExecStop=/bin/bash -lc '%h/VoxaFlow/scripts/rtx01_stack_down.sh'
+TimeoutStartSec=0
+
+[Install]
+WantedBy=default.target
+
